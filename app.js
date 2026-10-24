@@ -54,22 +54,25 @@ function safe(fn){return async(...a)=>{try{await fn(...a)}catch(e){say(e.message
 function members(){return db.groups[$('group').value]||[]}
 function dayOf(date){let d=new Date(date+'T12:00:00').getDay();return DAYS[d-1]||null}
 function weekOf(date){let d=new Date(date+'T12:00:00');d.setDate(d.getDate()-((d.getDay()+6)%7));return d.toISOString().slice(0,10)}
-function lastSchedule(date,group){let week=weekOf(date),day=dayOf(date);return db.history.filter(h=>h.group===group&&weekOf(h.date)<week&&dayOf(h.date)===day).sort((a,b)=>b.date.localeCompare(a.date)||b.saved.localeCompare(a.saved))[0]}
-function previousRole(name,id,date=$('date').value,group=$('group').value){return lastSchedule(date,group)?.assign[id]?.includes(name)||false}
+function lastSchedule(date,group){return generationValue('lastSchedule:'+JSON.stringify([date,group]),()=>lastScheduleUncached(date,group));}
+function lastScheduleUncached(date,group){let week=weekOf(date),day=dayOf(date);return db.history.filter(h=>h.group===group&&weekOf(h.date)<week&&dayOf(h.date)===day).sort((a,b)=>b.date.localeCompare(a.date)||b.saved.localeCompare(a.saved))[0]}
+function previousRole(name,id,date=$('date').value,group=$('group').value){return generationValue('previousRole:'+JSON.stringify([name,id,date,group]),()=>previousRoleUncached(name,id,date,group));}
+function previousRoleUncached(name,id,date=$('date').value,group=$('group').value){return lastSchedule(date,group)?.assign[id]?.includes(name)||false}
 function minute(s){let [h,m]=s.split(':').map(Number);return h*60+m}
 function matchTT(name,tt=db.timetables){let key=Object.keys(tt).find(k=>norm(k)===norm(name))||db.aliases?.[norm(name)];if(key&&tt[key])return tt[key];let alias=knownNames[name];if(alias&&tt[alias])return tt[alias];let candidates=Object.keys(tt).filter(k=>canonical(k)===canonical(name));return candidates.length===1?tt[candidates[0]]:null}
 function inference(name,day,rest,tt=db.timetables){let t=matchTT(name,tt);if(!t||!Array.isArray(t.busy?.[day]))return '?';let time=db.times[day==='JUMAAT'?'friday':'normal']['Rehat '+rest];let a=minute(time[0]),b=minute(time[1]);return t.busy[day].some(([s,e])=>s<b&&e>a)?'busy':'free'}
-function availability(name,day,rest){let v=db.availability[norm(name)]?.[day]?.[rest];return v&&v!=='?'?v:inference(name,day,rest)}
+function availability(name,day,rest){return generationValue('availability:'+JSON.stringify([name,day,rest]),()=>availabilityUncached(name,day,rest));}
+function availabilityUncached(name,day,rest){let v=db.availability[norm(name)]?.[day]?.[rest];return v&&v!=='?'?v:inference(name,day,rest)}
 function setAv(name,day,rest,value){let k=norm(name);db.availability[k]??={};db.availability[k][day]??={};db.availability[k][day][rest]=value}
 function invalidate(){current=null;$('result').hidden=true;}
 function init(){
  const old=$('group').value; $('group').innerHTML=Object.keys(db.groups).map(k=>`<option value="${esc(k)}">Kumpulan ${esc(k)} · ${db.groups[k].length} guru</option>`).join('');if(db.groups[old])$('group').value=old;
  $('adminGroup').innerHTML=$('group').innerHTML;
  $('version').textContent=db.version;$('uploadDate').textContent=db.uploadDate;
- refreshMembers();renderQuotas();renderTimes();renderGroups();renderReview();renderHistory();renderSubmissions();renderPending();
+ refreshMembers();if(authRole==='admin'){renderQuotas();renderTimes();renderGroups();renderSubmissions();renderPending();}renderHistory();
 }
 function renderCabin(){for(let [role,id] of [['kabin','cabinChoices'],['akhir','lateChoices'],['laporan','reportChoices']]){let picked=[...document.querySelectorAll('[data-fixed="'+role+'"]')].map(x=>x.value);$(id).innerHTML=Array.from({length:db.quotas[role]},(_,i)=>`<label><span>${role==='kabin'?'Petugas kelas kabin':role==='akhir'?'Petugas tunggu akhir':'Petugas laporan bertugas'}${db.quotas[role]>1?' '+(i+1):''}</span><select data-fixed="${role}" aria-label="${role==='kabin'?'Petugas kelas kabin':role==='akhir'?'Petugas tunggu akhir':'Petugas laporan bertugas'} ${i+1}" style="width:100%"><option value="">— Pilih nama guru —</option>${members().map(n=>`<option value="${esc(n)}" ${picked[i]===n?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`).join('')||'<small>Tiada petugas ditetapkan oleh ADMIN.</small>';}}
-function refreshMembers(){let a=members();renderCabin();$('chief').innerHTML=a.map(n=>`<option>${esc(n)}</option>`).join('');$('memberlist').innerHTML=a.map(n=>`<span class="member"><i class="dot ${sex(n)==='L'?'male':''}"></i>${esc(n)} <small>${sex(n)==='?'?'Jantina belum dikenal pasti':sex(n)==='L'?'L':'P'}</small></span>`).join('');$('teacherCount').textContent=a.length;$('memberCount').textContent=a.length+' ahli';invalidate();renderReview();}
+function refreshMembers(){let a=members();renderCabin();$('chief').innerHTML=a.map(n=>`<option>${esc(n)}</option>`).join('');$('memberlist').innerHTML=a.map(n=>`<span class="member"><i class="dot ${sex(n)==='L'?'male':''}"></i>${esc(n)} <small>${sex(n)==='?'?'Jantina belum dikenal pasti':sex(n)==='L'?'L':'P'}</small></span>`).join('');$('teacherCount').textContent=a.length;$('memberCount').textContent=a.length+' ahli';invalidate();if(authRole==='admin')renderReview();}
 function renderGroups(){let k=$('adminGroup').value||Object.keys(db.groups)[0];$('groupText').value=(db.groups[k]||[]).join('\n')}
 function renderQuotas(){$('quotaTable').innerHTML=roles.map(r=>`<tr><td><small>${r.phase}</small><br>${r.label}</td><td><input aria-label="Bilangan ${r.label}" type="number" min="0" max="50" value="${db.quotas[r.id]}" data-quota="${r.id}"></td></tr>`).join('')}
 function renderTimes(){$('timeSettings').innerHTML=['normal','friday'].map(t=>`<h4>${t==='normal'?'Isnin–Khamis':'Jumaat'}</h4>`+Object.entries(db.times[t]).map(([p,[a,b]])=>`<label class="time-row">${p}<input type="time" data-time="${t}|${p}|0" value="${a}"><span>hingga</span><input type="time" data-time="${t}|${p}|1" value="${b}"></label>`).join('')).join('')}
@@ -81,7 +84,8 @@ function summary(){let rows=Object.keys(db.groups).length;$('statGroups').textCo
 function renderHistory(){summary();$('history').innerHTML=db.history.length?db.history.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,30).map(h=>`<div class="history-row"><div><strong>${esc(h.date)}</strong><br><small>Kumpulan ${esc(h.group)} · ${esc(h.chief)}</small></div><button class="ghost" data-open="${esc(h.id)}">Buka</button></div>`).join(''):'<p class="muted">Belum ada jadual disahkan. Selepas jadual pertama disahkan, giliran minggu seterusnya akan dibandingkan secara automatik.</p>'}
 function renderSubmissions(){$('submissions').innerHTML=db.submissions.length?db.submissions.slice().reverse().map(s=>`<p><strong>${esc(s.date)} · Kumpulan ${esc(s.group)}</strong><br><small>${esc(s.chief)} · ${esc(new Date(s.sent).toLocaleString('ms-MY'))}</small></p>`).join(''):'<p class="muted">Tiada rekod hantar pada pelayar ini.</p>'}
 const FLEX_LOCATIONS=['gelanggang','r1dewan','r2kantin','r2gelanggang','pintua'];
-function groupQuotas(group){let q=clone(db.quotas);if((db.groups[group]||[]).length===13){q.gelanggang+=1;q.pintua+=1;}for(let r of roles){if(FLEX_LOCATIONS.includes(r.id)&&q[r.id]>5)q[r.id]=5;}return q;}
+function groupQuotas(group){return generationValue('groupQuotas:'+JSON.stringify([group]),()=>groupQuotasUncached(group));}
+function groupQuotasUncached(group){let q=clone(db.quotas);if((db.groups[group]||[]).length===13){q.gelanggang+=1;q.pintua+=1;}for(let r of roles){if(FLEX_LOCATIONS.includes(r.id)&&q[r.id]>5)q[r.id]=5;}return q;}
 function roleCapacity(c,id){return FLEX_LOCATIONS.includes(id)&&db.quotas[id]>0?5:groupQuotas(c.group)[id];}
 function adaptRestQuotas(c){if(c.mode==='manual')return;if((db.groups[c.group]||[]).length===13)roles.filter(r=>r.phase.startsWith('Rehat')&&FLEX_LOCATIONS.includes(r.id)).forEach(r=>c.quotas[r.id]=Math.min(db.quotas[r.id],c.assign[r.id].length));}
 function scheduleDensity(n,date){let tt=matchTT(n);return (tt?.busy?.[dayOf(date)]||[]).reduce((sum,[a,b])=>sum+b-a,0);}
@@ -109,7 +113,10 @@ function solveAllRest(c){
  for(let teacher of candidates)augment(teacher.n,new Set());
  slots.forEach((id,i)=>{if(owners[i])c.assign[id].push(owners[i]);});
 }
-function generate(){let base=createCurrent();base.assign.kabin=[...base.cabin];base.assign.akhir=[...base.late];base.assign.laporan=[...base.report];if(mode==='manual'){current=base;renderResult();say('Pilih nama di setiap lokasi. Nama yang dipilih hilang daripada lokasi lain dalam bahagian yang sama; buang tanda untuk memunculkannya semula.');return}
+let generationCache=null;
+function generationValue(key,calculate){if(!generationCache)return calculate();if(!generationCache.has(key))generationCache.set(key,calculate());return generationCache.get(key);}
+function generate(){generationCache=new Map();try{return generateUncached();}finally{generationCache=null;}}
+function generateUncached(){let base=createCurrent();base.assign.kabin=[...base.cabin];base.assign.akhir=[...base.late];base.assign.laporan=[...base.report];if(mode==='manual'){current=base;renderResult();say('Pilih nama di setiap lokasi. Nama yang dipilih hilang daripada lokasi lain dalam bahagian yang sama; buang tanda untuk memunculkannya semula.');return}
  let best=null,bestScore=Infinity;
  for(let attempt=0;attempt<60;attempt++){
  let c=clone(base);
