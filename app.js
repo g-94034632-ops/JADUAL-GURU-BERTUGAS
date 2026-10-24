@@ -231,7 +231,20 @@ window.BARSA={roles,validate,solvePhase,sex,weekOf,dayOf,generate,get db(){retur
 
 $('loginBtn').onclick=async()=>{if(!window.BarsaBridge.isReady)window.BarsaBridge.connectPopup();let btn=$('loginBtn');btn.disabled=true;$('loginError').textContent='';try{let r=await rpc('login',$('loginRole').value,$('loginCode').value);authToken=r.token;authRole=r.role;saveFailed=false;await refreshCloud();init();auditCapacity();$('loginPane').hidden=true;$('appMain').hidden=false;$('loginCode').value='';document.querySelector('[data-tab="admin"]').hidden=authRole!=='admin';if(authRole!=='admin')document.querySelector('[data-tab="leader"]').click();cloudStatus('✓ Bersambung ke Google Sheets');}catch(e){$('loginError').textContent=e.message;}finally{btn.disabled=false;}};
 $('refreshCloudBtn').onclick=safe(async()=>{await refreshCloud();init();auditCapacity();say('Data terkini dimuat daripada Google Sheets. Pilih petugas kabin dan tunggu akhir semula.');});
-$('logoutBtn').onclick=safe(async()=>{await saveChain;await rpc('logout',authToken);authToken='';authRole='';db.history=[];db.groups={};location.reload();});
+async function logoutUser(){
+ const btn=$('logoutBtn');if(btn.disabled)return;btn.disabled=true;btn.textContent='Sedang log keluar…';const token=authToken;
+ try{
+ let timeout;try{await Promise.race([saveChain.catch(()=>{}).then(()=>rpc('logout',token)).catch(()=>{}),new Promise(resolve=>{timeout=setTimeout(resolve,2000);})]);}finally{clearTimeout(timeout);}
+ }finally{
+ authToken='';authRole='';current=null;serverRevision=0;saveFailed=false;saveChain=Promise.resolve();
+ db.history=[];db.submissions=[];db.groups={};db.timetables={};db.availability={};db.aliases={};db.longLeave={};db.genderOverrides={};db.unwell={};
+ $('loginCode').value='';$('loginError').textContent='';$('result').hidden=true;$('notice').hidden=true;$('appMain').hidden=true;$('loginPane').hidden=false;
+ btn.disabled=false;btn.textContent='Log keluar';
+ // Reload also discards callbacks from any request left pending on the old session.
+ try{location.reload();}catch(e){$('loginPane').scrollIntoView({block:'start'});}
+ }
+}
+$('logoutBtn').onclick=logoutUser;
 
 $('restInfoBtn').onclick=safe(showRestInfo);$('restInfoClose').onclick=()=>$('restInfoDialog').close();
 
