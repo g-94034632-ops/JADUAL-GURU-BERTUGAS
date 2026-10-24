@@ -1,0 +1,12 @@
+<!doctype html><html lang="ms"><head><base target="_top"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sambungan Jadual BARSA</title></head><body style="font:16px/1.6 Arial,sans-serif;padding:25px;background:#f2f6f5;color:#173c45"><h2>Sambungan Google · Jadual BARSA</h2><p id="status">Menyambungkan rekod Google Sheets…</p><p>Biarkan tetingkap ini terbuka semasa menggunakan laman GitHub. Kod ADMIN dan KETUA dimasukkan pada laman jadual sahaja.</p><script>
+(()=>{
+ const channel=<?!= channelJson ?>,origin='https://g-94034632-ops.github.io';
+ const methods=new Set(['login','logout','loadState','saveConfig','confirmSchedule','submitSchedule']);
+ function targets(){let result=[];try{result.push(window.top)}catch{}try{if(window.top.opener)result.push(window.top.opener)}catch{}return [...new Set(result)];}
+ function send(target,data){target.postMessage(Object.assign({type:'BARSA_BRIDGE',channel},data),origin);}
+ window.addEventListener('message',e=>{const m=e.data;if(e.origin!==origin||!targets().includes(e.source)||!m||m.type!=='BARSA_BRIDGE'||m.channel!==channel||m.kind!=='call'||!methods.has(m.method)||!Array.isArray(m.args)||typeof m.id!=='string')return;
+  google.script.run.withSuccessHandler(raw=>send(e.source,{kind:'result',id:m.id,raw})).withFailureHandler(err=>send(e.source,{kind:'result',id:m.id,error:err.message||String(err)})).api(m.method,m.args);
+ });
+ targets().forEach(target=>send(target,{kind:'ready'}));document.getElementById('status').textContent='Sambungan tersedia. Kembali ke tab Jadual BARSA. Jika laman tidak bersambung, buka terus aplikasi Google atau gunakan satu akaun MOE dalam pelayar.';
+})();
+</script></body></html>
